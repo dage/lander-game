@@ -1,9 +1,10 @@
 {
   "physics": {
+    "engine": "Rapier.js",
     "gravity": 9.8,
     "thrustForce": 200,
     "shipMass": 1,
-    "restitution": 0.3,
+    "restitution": 0.7,
     "friction": 0.5
   },
   "graphics": {
