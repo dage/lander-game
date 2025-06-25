@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lander Game v0.1</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+    <div id="info">
+        <div>Lander Game - Physics Demo</div>
+        <div>Gravity: 9.8 m/s²</div>
+        <div>Press F for FPS counter</div>
+    </div>
+
+    <!-- PixiJS 8 from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.10.2/dist/pixi.min.js"></script>
+    <!-- Rapier Physics from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@dimforge/rapier2d@0.17.2/rapier.js"></script>
+
+    <script type="module">
+        let RAPIER;
+        let app, world, graphics;
+        let bodies = [];
+        let showFPS = false;
+        let lastTime = 0;
+        let fps = 0;
+
+        async function init() {
+            // Initialize Rapier physics
+            RAPIER = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier2d@0.17.2/rapier.js');
+            await RAPIER.init();
+
+            // Create PixiJS application
+            app = new PIXI.Application();
+            await app.init({
+                width: 800,
+                height: 600,
+                backgroundColor: 0x1a1a2e,
+                antialias: true
+            });
+
+            document.getElementById('gameContainer').appendChild(app.canvas);
+
+            // Create physics world with gravity
+            const gravity = { x: 0.0, y: 9.8 };
+            world = new RAPIER.World(gravity);
+
+            // Create graphics container
+            graphics = new PIXI.Graphics();
+            app.stage.addChild(graphics);
+
+            // Create ground (static body)
+            createGround();
+
+            // Create falling boxes
+            createFallingBox(400, 100);
+            createFallingBox(350, 50);
+            createFallingBox(450, 30);
+
+            // Setup input handling
+            setupInput();
+
+            // Start game loop
+            app.ticker.add(gameLoop);
+
+            console.log('Lander Game initialized - Physics demo ready!');
+        }
+
+        function createGround() {
+            // Ground body
+            const groundBodyDesc = RAPIER.RigidBodyDesc.fixed()
+                .setTranslation(400, 580);
+            const groundBody = world.createRigidBody(groundBodyDesc);
+
+            // Ground collider
+            const groundColliderDesc = RAPIER.ColliderDesc.cuboid(400, 20);
+            world.createCollider(groundColliderDesc, groundBody);
+
+            bodies.push({
+                body: groundBody,
+                isGround: true,
+                width: 800,
+                height: 40
+            });
+        }
+
+        function createFallingBox(x, y) {
+            // Dynamic rigid body
+            const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+                .setTranslation(x, y);
+            const rigidBody = world.createRigidBody(rigidBodyDesc);
+
+            // Box collider
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(15, 15);
+            world.createCollider(colliderDesc, rigidBody);
+
+            bodies.push({
+                body: rigidBody,
+                isGround: false,
+                width: 30,
+                height: 30
+            });
+        }
+
+        function setupInput() {
+            window.addEventListener('keydown', (event) => {
+                switch(event.code) {
+                    case 'KeyF':
+                        showFPS = !showFPS;
+                        break;
+                    case 'Space':
+                        // Add a new falling box at random position
+                        createFallingBox(Math.random() * 700 + 50, 50);
+                        break;
+                }
+            });
+        }
+
+        function gameLoop(delta) {
+            // Update physics (60 FPS timestep)
+            world.step();
+
+            // Clear graphics
+            graphics.clear();
+
+            // Draw all bodies
+            for (const bodyData of bodies) {
+                const position = bodyData.body.translation();
+                const rotation = bodyData.body.rotation();
+
+                if (bodyData.isGround) {
+                    // Draw ground
+                    graphics.rect(
+                        position.x - bodyData.width/2,
+                        position.y - bodyData.height/2,
+                        bodyData.width,
+                        bodyData.height
+                    );
+                    graphics.fill(0x4a4a4a);
+                } else {
+                    // Draw falling box
+                    graphics.rect(
+                        position.x - bodyData.width/2,
+                        position.y - bodyData.height/2,
+                        bodyData.width,
+                        bodyData.height
+                    );
+                    graphics.fill(0xff6b6b);
+                    
+                    // Draw rotation indicator (small line)
+                    const lineLength = 20;
+                    const endX = position.x + Math.cos(rotation) * lineLength;
+                    const endY = position.y + Math.sin(rotation) * lineLength;
+                    
+                    graphics.moveTo(position.x, position.y);
+                    graphics.lineTo(endX, endY);
+                    graphics.stroke({ color: 0xffffff, width: 2 });
+                }
+            }
+
+            // FPS calculation and display
+            if (showFPS) {
+                const currentTime = Date.now();
+                if (currentTime - lastTime >= 1000) {
+                    fps = Math.round(app.ticker.FPS);
+                    lastTime = currentTime;
+                }
+                
+                // Create FPS text
+                const fpsText = new PIXI.Text(`FPS: ${fps}`, {
+                    fontFamily: 'Arial',
+                    fontSize: 16,
+                    fill: 0xffffff
+                });
+                fpsText.position.set(10, 80);
+                app.stage.addChild(fpsText);
+                
+                // Remove text after this frame
+                app.ticker.addOnce(() => {
+                    app.stage.removeChild(fpsText);
+                });
+            }
+
+            // Add instruction text
+            const instructionText = new PIXI.Text('Press SPACE to add more boxes', {
+                fontFamily: 'Arial',
+                fontSize: 14,
+                fill: 0xcccccc
+            });
+            instructionText.position.set(10, app.screen.height - 30);
+            app.stage.addChild(instructionText);
+            
+            app.ticker.addOnce(() => {
+                app.stage.removeChild(instructionText);
+            });
+        }
+
+        // Initialize the game
+        init().catch(console.error);
+    </script>
+</body>
+</html> 

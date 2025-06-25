@@ -1,0 +1,18 @@
+{
+  "physics": {
+    "gravity": 9.8,
+    "thrustForce": 200,
+    "shipMass": 1,
+    "restitution": 0.3,
+    "friction": 0.5
+  },
+  "graphics": {
+    "shipSize": 32,
+    "backgroundColor": "0x1a1a2e",
+    "showDebugInfo": true
+  },
+  "controls": {
+    "rotationSpeed": 2.0,
+    "thrustCooldown": 50
+  }
+} 
