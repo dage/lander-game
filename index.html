@@ -41,22 +41,21 @@
 
     <!-- PixiJS 8 from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@8.10.2/dist/pixi.min.js"></script>
-    <!-- Rapier Physics from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@dimforge/rapier2d@0.17.2/rapier.js"></script>
 
     <script type="module">
-        let RAPIER;
-        let app, world, graphics;
-        let bodies = [];
+        let app, graphics;
+        let boxes = [];
         let showFPS = false;
         let lastTime = 0;
         let fps = 0;
+        let frameCount = 0;
+        
+        // Simple physics constants
+        const GRAVITY = 0.5;
+        const BOUNCE = 0.7;
+        const FRICTION = 0.99;
 
         async function init() {
-            // Initialize Rapier physics
-            RAPIER = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier2d@0.17.2/rapier.js');
-            await RAPIER.init();
-
             // Create PixiJS application
             app = new PIXI.Application();
             await app.init({
@@ -68,21 +67,17 @@
 
             document.getElementById('gameContainer').appendChild(app.canvas);
 
-            // Create physics world with gravity
-            const gravity = { x: 0.0, y: 9.8 };
-            world = new RAPIER.World(gravity);
-
             // Create graphics container
             graphics = new PIXI.Graphics();
             app.stage.addChild(graphics);
 
-            // Create ground (static body)
-            createGround();
-
-            // Create falling boxes
+            // Create falling boxes with simple physics
             createFallingBox(400, 100);
             createFallingBox(350, 50);
             createFallingBox(450, 30);
+            
+            console.log('Created', boxes.length, 'falling boxes');
+            console.log('Canvas size:', app.screen.width, 'x', app.screen.height);
 
             // Setup input handling
             setupInput();
@@ -90,42 +85,20 @@
             // Start game loop
             app.ticker.add(gameLoop);
 
-            console.log('Lander Game initialized - Physics demo ready!');
-        }
-
-        function createGround() {
-            // Ground body
-            const groundBodyDesc = RAPIER.RigidBodyDesc.fixed()
-                .setTranslation(400, 580);
-            const groundBody = world.createRigidBody(groundBodyDesc);
-
-            // Ground collider
-            const groundColliderDesc = RAPIER.ColliderDesc.cuboid(400, 20);
-            world.createCollider(groundColliderDesc, groundBody);
-
-            bodies.push({
-                body: groundBody,
-                isGround: true,
-                width: 800,
-                height: 40
-            });
+            console.log('Lander Game initialized - Simple physics demo ready!');
         }
 
         function createFallingBox(x, y) {
-            // Dynamic rigid body
-            const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
-                .setTranslation(x, y);
-            const rigidBody = world.createRigidBody(rigidBodyDesc);
-
-            // Box collider
-            const colliderDesc = RAPIER.ColliderDesc.cuboid(15, 15);
-            world.createCollider(colliderDesc, rigidBody);
-
-            bodies.push({
-                body: rigidBody,
-                isGround: false,
+            boxes.push({
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 2, // Random horizontal velocity
+                vy: 0, // Start with no vertical velocity
                 width: 30,
-                height: 30
+                height: 30,
+                rotation: 0,
+                rotationSpeed: (Math.random() - 0.5) * 0.1,
+                color: 0xff6b6b
             });
         }
 
@@ -144,45 +117,70 @@
         }
 
         function gameLoop(delta) {
-            // Update physics (60 FPS timestep)
-            world.step();
+            frameCount++;
+            
+            // Update simple physics for each box
+            for (const box of boxes) {
+                // Apply gravity
+                box.vy += GRAVITY;
+                
+                // Apply friction to horizontal movement
+                box.vx *= FRICTION;
+                
+                // Update position
+                box.x += box.vx;
+                box.y += box.vy;
+                
+                // Update rotation
+                box.rotation += box.rotationSpeed;
+                
+                // Ground collision (bottom of screen)
+                const groundY = app.screen.height - 50;
+                if (box.y + box.height/2 > groundY) {
+                    box.y = groundY - box.height/2;
+                    box.vy *= -BOUNCE; // Bounce
+                    box.rotationSpeed *= 0.8; // Reduce rotation on bounce
+                }
+                
+                // Wall collisions
+                if (box.x - box.width/2 < 0) {
+                    box.x = box.width/2;
+                    box.vx *= -BOUNCE;
+                }
+                if (box.x + box.width/2 > app.screen.width) {
+                    box.x = app.screen.width - box.width/2;
+                    box.vx *= -BOUNCE;
+                }
+            }
 
             // Clear graphics
             graphics.clear();
 
-            // Draw all bodies
-            for (const bodyData of bodies) {
-                const position = bodyData.body.translation();
-                const rotation = bodyData.body.rotation();
+            // Draw ground
+            graphics.beginFill(0x4a4a4a);
+            graphics.drawRect(0, app.screen.height - 50, app.screen.width, 50);
+            graphics.endFill();
 
-                if (bodyData.isGround) {
-                    // Draw ground
-                    graphics.rect(
-                        position.x - bodyData.width/2,
-                        position.y - bodyData.height/2,
-                        bodyData.width,
-                        bodyData.height
-                    );
-                    graphics.fill(0x4a4a4a);
-                } else {
-                    // Draw falling box
-                    graphics.rect(
-                        position.x - bodyData.width/2,
-                        position.y - bodyData.height/2,
-                        bodyData.width,
-                        bodyData.height
-                    );
-                    graphics.fill(0xff6b6b);
-                    
-                    // Draw rotation indicator (small line)
-                    const lineLength = 20;
-                    const endX = position.x + Math.cos(rotation) * lineLength;
-                    const endY = position.y + Math.sin(rotation) * lineLength;
-                    
-                    graphics.moveTo(position.x, position.y);
-                    graphics.lineTo(endX, endY);
-                    graphics.stroke({ color: 0xffffff, width: 2 });
-                }
+            // Draw all boxes
+            for (const box of boxes) {
+                // Draw falling box
+                graphics.beginFill(box.color);
+                graphics.drawRect(
+                    box.x - box.width/2,
+                    box.y - box.height/2,
+                    box.width,
+                    box.height
+                );
+                graphics.endFill();
+                
+                // Draw rotation indicator (small line)
+                graphics.lineStyle(2, 0xffffff);
+                const lineLength = 20;
+                const endX = box.x + Math.cos(box.rotation) * lineLength;
+                const endY = box.y + Math.sin(box.rotation) * lineLength;
+                
+                graphics.moveTo(box.x, box.y);
+                graphics.lineTo(endX, endY);
             }
 
             // FPS calculation and display
@@ -217,8 +215,18 @@
             instructionText.position.set(10, app.screen.height - 30);
             app.stage.addChild(instructionText);
             
+            // Add debug info
+            const debugText = new PIXI.Text(`Frame: ${frameCount} | Boxes: ${boxes.length}`, {
+                fontFamily: 'Arial',
+                fontSize: 12,
+                fill: 0x00ff00
+            });
+            debugText.position.set(10, app.screen.height - 70);
+            app.stage.addChild(debugText);
+            
             app.ticker.addOnce(() => {
                 app.stage.removeChild(instructionText);
+                app.stage.removeChild(debugText);
             });
         }
 
