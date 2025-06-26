@@ -7,15 +7,19 @@ A 2D physics-based arcade game built with PixiJS 8 and Rapier.js physics engine.
 1. **Open the game**: Simply open `index.html` in a web browser
 2. **No build required**: The game runs directly from the HTML file using CDN resources
 
-## Current Demo
+## Current Game State
 
-This initial version shows a physics demo with:
-- **Falling boxes** with realistic gravity (9.8 m/s²)
-- **Physics simulation** using Rapier.js WASM
-- **Interactive controls**:
-  - Press `F` to toggle FPS counter
-  - Press `SPACE` to add more falling boxes
-- **Ground collision** - boxes will bounce and settle on the ground
+This version implements the core lander game mechanics:
+- **Spaceship physics** - Green box representing the spaceship with realistic physics
+- **Flat ground** - Full-width ground collision surface
+- **Keyboard controls**:
+  - `←/→` or `A/D`: Rotate spaceship clockwise/counterclockwise
+  - `↑` or `W` or `SPACE`: Fire thrust in forward direction
+  - `F`: Toggle FPS counter
+- **Visual indicators**:
+  - White line showing spaceship nose direction
+  - Red line showing thrust effect when firing
+  - Real-time position and frame tracking
 
 ## Tech Stack
 
@@ -60,6 +64,9 @@ lander-game/
 - ✅ Basic physics simulation
 - ✅ PixiJS rendering
 - ✅ Rapier.js physics integration
-- ⏳ Ship implementation (next)
-- ⏳ Player controls
-- ⏳ Game mechanics 
+- ✅ Spaceship implementation
+- ✅ Player controls (rotation + thrust)
+- ✅ Ground collision
+- ⏳ Spaceship sprite/graphics
+- ⏳ Landing mechanics
+- ⏳ Win/lose conditions 

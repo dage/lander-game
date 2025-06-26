@@ -34,9 +34,9 @@
         <canvas id="gameCanvas"></canvas>
     </div>
     <div id="info">
-        <div>Lander Game - Rapier Physics Demo</div>
-        <div>Gravity: 9.8 m/s² | Restitution: 0.7</div>
-        <div>Press F for FPS counter | SPACE for more boxes</div>
+        <div>Lander Game - Spaceship Controls</div>
+        <div>Gravity: 9.8 m/s² | Thrust: 200 N</div>
+        <div>← / → or A / D: Rotate | ↑ / W / SPACE: Thrust | F: FPS</div>
     </div>
 
     <!-- PixiJS 8 from CDN -->
@@ -44,11 +44,22 @@
 
     <script type="module">
         let app, graphics, world, RAPIER;
-        let rigidBodies = [];
+        let ground, spaceship;
         let showFPS = false;
         let lastTime = 0;
         let fps = 0;
         let frameCount = 0;
+        
+        // Game settings
+        const THRUST_FORCE = 200;
+        const ROTATION_SPEED = 2.0;
+        
+        // Input state
+        let keys = {
+            left: false,
+            right: false,
+            thrust: false
+        };
 
         async function init() {
             try {
@@ -77,15 +88,13 @@
                 graphics = new PIXI.Graphics();
                 app.stage.addChild(graphics);
 
-                // Create ground (static body)
+                // Create flat ground covering the viewport
                 createGround();
 
-                // Create falling boxes with Rapier physics
-                createFallingBox(400, 100);
-                createFallingBox(350, 50);
-                createFallingBox(450, 30);
+                // Create spaceship
+                createSpaceship(app.screen.width / 2, 100);
                 
-                console.log('Created', rigidBodies.length, 'rigid bodies');
+                console.log('Ground and spaceship created');
                 console.log('Canvas size:', app.screen.width, 'x', app.screen.height);
 
                 // Setup input handling
@@ -101,58 +110,91 @@
         }
 
         function createGround() {
-            // Create ground rigid body (fixed/static)
+            // Create ground rigid body covering the full viewport width
+            const groundHeight = 40;
+            const groundY = app.screen.height - groundHeight / 2;
+            
             const groundBodyDesc = RAPIER.RigidBodyDesc.fixed()
-                .setTranslation(400, 580);
+                .setTranslation(app.screen.width / 2, groundY);
             const groundBody = world.createRigidBody(groundBodyDesc);
 
-            // Create ground collider
-            const groundColliderDesc = RAPIER.ColliderDesc.cuboid(400, 20);
+            // Create ground collider spanning the full width
+            const groundColliderDesc = RAPIER.ColliderDesc.cuboid(app.screen.width / 2, groundHeight / 2);
             world.createCollider(groundColliderDesc, groundBody);
 
-            rigidBodies.push({
+            ground = {
                 body: groundBody,
-                isGround: true,
-                width: 800,
-                height: 40,
+                width: app.screen.width,
+                height: groundHeight,
                 color: 0x4a4a4a
-            });
+            };
         }
 
-        function createFallingBox(x, y) {
-            // Create dynamic rigid body
+        function createSpaceship(x, y) {
+            // Create spaceship rigid body
             const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
                 .setTranslation(x, y);
             const rigidBody = world.createRigidBody(rigidBodyDesc);
 
-            // Add some initial random velocity
-            rigidBody.setLinvel({ x: (Math.random() - 0.5) * 2, y: 0 }, true);
-            rigidBody.setAngvel(Math.random() - 0.5, true);
+            // Set spaceship mass as per PRD
+            rigidBody.setAdditionalMass(1.0, true);
 
-            // Create box collider
-            const colliderDesc = RAPIER.ColliderDesc.cuboid(15, 15)
-                .setRestitution(0.7) // Bounce factor
-                .setFriction(0.5);   // Friction
+            // Create box collider for spaceship
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(16, 16) // 32x32 sprite size
+                .setRestitution(0.3)
+                .setFriction(0.5);
             world.createCollider(colliderDesc, rigidBody);
 
-            rigidBodies.push({
+            spaceship = {
                 body: rigidBody,
-                isGround: false,
-                width: 30,
-                height: 30,
-                color: 0xff6b6b
-            });
+                width: 32,
+                height: 32,
+                color: 0x00ff00, // Green for spaceship
+                thrustParticles: []
+            };
         }
 
         function setupInput() {
+            // Handle keydown events
             window.addEventListener('keydown', (event) => {
                 switch(event.code) {
                     case 'KeyF':
                         showFPS = !showFPS;
                         break;
+                    case 'ArrowLeft':
+                    case 'KeyA':
+                        keys.left = true;
+                        event.preventDefault();
+                        break;
+                    case 'ArrowRight':
+                    case 'KeyD':
+                        keys.right = true;
+                        event.preventDefault();
+                        break;
+                    case 'ArrowUp':
+                    case 'KeyW':
                     case 'Space':
-                        // Add a new falling box at random position
-                        createFallingBox(Math.random() * 700 + 50, 50);
+                        keys.thrust = true;
+                        event.preventDefault();
+                        break;
+                }
+            });
+
+            // Handle keyup events
+            window.addEventListener('keyup', (event) => {
+                switch(event.code) {
+                    case 'ArrowLeft':
+                    case 'KeyA':
+                        keys.left = false;
+                        break;
+                    case 'ArrowRight':
+                    case 'KeyD':
+                        keys.right = false;
+                        break;
+                    case 'ArrowUp':
+                    case 'KeyW':
+                    case 'Space':
+                        keys.thrust = false;
                         break;
                 }
             });
@@ -161,37 +203,57 @@
         function gameLoop(delta) {
             frameCount++;
             
+            // Handle spaceship controls
+            updateSpaceshipControls();
+            
             // Step the physics simulation
             world.step();
 
             // Clear graphics
             graphics.clear();
 
-            // Draw all rigid bodies
-            for (const bodyData of rigidBodies) {
-                const position = bodyData.body.translation();
-                const rotation = bodyData.body.rotation();
+            // Draw ground
+            const groundPos = ground.body.translation();
+            graphics.beginFill(ground.color);
+            graphics.drawRect(
+                groundPos.x - ground.width/2,
+                groundPos.y - ground.height/2,
+                ground.width,
+                ground.height
+            );
+            graphics.endFill();
 
-                // Draw the body
-                graphics.beginFill(bodyData.color);
-                graphics.drawRect(
-                    position.x - bodyData.width/2,
-                    position.y - bodyData.height/2,
-                    bodyData.width,
-                    bodyData.height
-                );
-                graphics.endFill();
+            // Draw spaceship
+            const shipPos = spaceship.body.translation();
+            const shipRotation = spaceship.body.rotation();
+            
+            graphics.beginFill(spaceship.color);
+            graphics.drawRect(
+                shipPos.x - spaceship.width/2,
+                shipPos.y - spaceship.height/2,
+                spaceship.width,
+                spaceship.height
+            );
+            graphics.endFill();
+            
+            // Draw spaceship direction indicator (nose)
+            graphics.lineStyle(3, 0xffffff);
+            const noseLength = 25;
+            const noseX = shipPos.x + Math.cos(shipRotation - Math.PI/2) * noseLength;
+            const noseY = shipPos.y + Math.sin(shipRotation - Math.PI/2) * noseLength;
+            
+            graphics.moveTo(shipPos.x, shipPos.y);
+            graphics.lineTo(noseX, noseY);
+            
+            // Draw thrust visual effect
+            if (keys.thrust) {
+                graphics.lineStyle(2, 0xff4444);
+                const thrustLength = 30;
+                const thrustX = shipPos.x - Math.cos(shipRotation - Math.PI/2) * thrustLength;
+                const thrustY = shipPos.y - Math.sin(shipRotation - Math.PI/2) * thrustLength;
                 
-                // Draw rotation indicator for non-ground bodies
-                if (!bodyData.isGround) {
-                    graphics.lineStyle(2, 0xffffff);
-                    const lineLength = 20;
-                    const endX = position.x + Math.cos(rotation) * lineLength;
-                    const endY = position.y + Math.sin(rotation) * lineLength;
-                    
-                    graphics.moveTo(position.x, position.y);
-                    graphics.lineTo(endX, endY);
-                }
+                graphics.moveTo(shipPos.x, shipPos.y);
+                graphics.lineTo(thrustX, thrustY);
             }
 
             // FPS calculation and display
@@ -218,7 +280,7 @@
             }
 
             // Add instruction text
-            const instructionText = new PIXI.Text('Press SPACE to add more boxes', {
+            const instructionText = new PIXI.Text('← / → : Rotate | ↑ / W / SPACE : Thrust', {
                 fontFamily: 'Arial',
                 fontSize: 14,
                 fill: 0xcccccc
@@ -227,18 +289,39 @@
             app.stage.addChild(instructionText);
             
             // Add debug info
-            const debugText = new PIXI.Text(`Frame: ${frameCount} | Bodies: ${rigidBodies.length}`, {
+            const debugText = new PIXI.Text(`Frame: ${frameCount} | Spaceship at (${Math.round(shipPos.x)}, ${Math.round(shipPos.y)})`, {
                 fontFamily: 'Arial',
                 fontSize: 12,
                 fill: 0x00ff00
             });
-            debugText.position.set(10, app.screen.height - 70);
+            debugText.position.set(10, app.screen.height - 50);
             app.stage.addChild(debugText);
             
             app.ticker.addOnce(() => {
                 app.stage.removeChild(instructionText);
                 app.stage.removeChild(debugText);
             });
+        }
+
+        function updateSpaceshipControls() {
+            // Rotation controls
+            if (keys.left) {
+                spaceship.body.setAngvel(-ROTATION_SPEED, true);
+            } else if (keys.right) {
+                spaceship.body.setAngvel(ROTATION_SPEED, true);
+            } else {
+                // Stop rotation when no input
+                spaceship.body.setAngvel(0, true);
+            }
+            
+            // Thrust control
+            if (keys.thrust) {
+                const rotation = spaceship.body.rotation();
+                const thrustX = Math.cos(rotation - Math.PI/2) * THRUST_FORCE;
+                const thrustY = Math.sin(rotation - Math.PI/2) * THRUST_FORCE;
+                
+                spaceship.body.addForce({ x: thrustX, y: thrustY }, true);
+            }
         }
 
         // Initialize the game
